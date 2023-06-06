@@ -1,16 +1,16 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: wine
+  name: gdal
   labels:
-    run: wine
+    run: gdal
 spec:
   containers:
-  - image: valluzzi/wine:latest
-    name: wine
-    command:
-      - wine
+  - image: valluzzi/gdal:latest
+    name: gdal
+    command: 
+      - gdalinfo
     args:
-      - "--version"
+      - --version
   dnsPolicy: ClusterFirst
   restartPolicy: Never

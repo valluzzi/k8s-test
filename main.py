@@ -25,8 +25,9 @@ def create_pod(pod_manifest, namespace):
         print(f"Unknown error:{ex}")
     
     while pod.status.phase == "Pending":
+        print(f"{pod.status.phase}...")
         pod = api_instance.read_namespaced_pod(name=pod_name, namespace=namespace)
-        time.sleep(1)
+        time.sleep(0.5)
 
     try:
         logs = api_instance.read_namespaced_pod_log(name=pod_name, namespace=namespace, follow=True, _preload_content=False)
@@ -35,13 +36,19 @@ def create_pod(pod_manifest, namespace):
     except client.rest.ApiException as e:
         print(f"Exception when retrieving Pod logs: {e}")
 
+    # delete the pod
+    try:
+        api_instance.delete_namespaced_pod(name=pod_name, namespace=namespace, body=client.V1DeleteOptions())
+        print(f"Pod '{pod_name}' deleted.")
+    except client.rest.ApiException as ex:
+        print(f"Exception when deleting Pod: {e}")
 
 def main():
     """
     main function
     """
     config.load_kube_config()
-    pod_manifest = 'conf/wine.yml'
+    pod_manifest = 'conf/gdal.yml'
     create_pod(pod_manifest, namespace="default")
 
 if __name__ == "__main__":
