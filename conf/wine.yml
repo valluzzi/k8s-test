@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: wine
+  labels:
+    run: wine
+spec:
+  containers:
+  - image: valluzzi/wine:latest
+    name: wine
+    command:
+      - wine
+    args:
+      - "--help"
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
