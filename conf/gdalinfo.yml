@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gdal
+  labels:
+    run: gdal
+spec:
+  containers:
+  - image: docker.io/valluzzi/gdal:latest
+    name: gdal
+    command: 
+      - gdalinfo
+    args:
+      - --version
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never

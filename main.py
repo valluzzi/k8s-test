@@ -1,55 +1,157 @@
-from kubernetes import client,config
-import os, yaml
-from datetime import datetime
+import os
 import time
+import yaml
+from kubernetes import client, config
+import shlex, logging
+from datetime import datetime
 
 
-def create_pod(pod_manifest, namespace):
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.DEBUG)
+
+
+def manifest_from_file(fileyml):
+    """
+    manifest_from_file
+    """
+    pod_manifest = None
+    print(fileyml, os.path.isfile(fileyml))
+    if os.path.isfile(fileyml):
+        with open(fileyml) as stream:
+            pod_manifest = yaml.safe_load(stream)
+            #patch the name
+            name = pod_manifest["metadata"]["name"]
+            pod_name = datetime.now().strftime(f"{name}-%Y%m%d%H%M%S")
+            pod_manifest["metadata"]["name"] = pod_name
+
+    return pod_manifest
+
+
+def create_manifest(image):
+    """
+    create_manifest
+    """
+    # image = "docker.io/valluzzi/gdal:latest"
+    name = image.split("/")[-1].split(":")[0]
+
+    pod_name = datetime.now().strftime(f"{name}-%Y%m%d%H%M%S")
+
+    pod_manifest = {
+        "apiVersion": "v1", 
+        "kind": "Pod", 
+        "metadata": {
+            "name": pod_name, 
+            "labels": {
+                "run": name
+            }
+        }, 
+        "spec": {
+            "containers": [
+                {
+                    "image": image, 
+                    "name":  name, 
+                    "command": ["gdalinfo"], 
+                    "args": ["--version"]
+                }], 
+            "dnsPolicy": "ClusterFirst", 
+            "restartPolicy": "Never"
+        }
+    }
+    return pod_manifest
+
+
+def create_pod(command):
     """
     create_pod
     """
-    if os.path.isfile(pod_manifest):
-        with open(pod_manifest) as stream:
-            pod_manifest = yaml.safe_load(stream)
+    args = shlex.split(command)
+    command = args[0]
+    args = args[1:]
 
+    pod_manifest = manifest_from_file(f"./conf/{command}.yml")
+    pod_name = pod_manifest["metadata"]["name"]
+    pod_manifest["spec"]["containers"][0]["command"] = [command, ]
+    pod_manifest["spec"]["containers"][0]["args"] = args
+    
     api_instance = client.CoreV1Api()
-    pod_name = pod_manifest['metadata']['name']
-    pod_name = datetime.now().strftime(f"{pod_name}-%Y%m%d%H%M%S")
-    pod_manifest['metadata']['name'] = pod_name
-    print(f"Creating pod {pod_name}...")
+
+    LOGGER.debug(f"Creating pod {pod_name}...")
     try:
         # Try creating the pod
-        pod = api_instance.create_namespaced_pod(body=pod_manifest, namespace=namespace)
-        print(f"Pod '{pod_name}' created.")
+        pod = api_instance.create_namespaced_pod(body=pod_manifest, namespace="default")
+        LOGGER.debug(f"Pod '{pod_name}' created.")
+        return pod
     except client.rest.ApiException as ex:
-        print(f"Unknown error:{ex}")
+        LOGGER.error(f"Unknown error:{ex}")
+        return None
     
-    while pod.status.phase == "Pending":
-        print(f"{pod.status.phase}...")
-        pod = api_instance.read_namespaced_pod(name=pod_name, namespace=namespace)
-        time.sleep(0.5)
 
+def read_log(pod, close=False):
+    """
+    read_log
+    """
+    res = ""
     try:
-        logs = api_instance.read_namespaced_pod_log(name=pod_name, namespace=namespace, follow=True, _preload_content=False)
-        for line in logs.stream():
-            print(line.decode('utf-8'))
-    except client.rest.ApiException as e:
-        print(f"Exception when retrieving Pod logs: {e}")
+        if pod and pod.metadata:
+            api_instance = client.CoreV1Api()
+            pod_name = pod.metadata.name
+            namespace = pod.metadata.namespace
+            # wait for the pod to be running
+            while pod.status.phase == "Pending":
+                LOGGER.debug(f"{pod.status.phase}...")
+                pod = api_instance.read_namespaced_pod(name=pod_name, namespace=namespace)
+                time.sleep(0.5)
+            # get the pod logs
+            logs = api_instance.read_namespaced_pod_log(name=pod_name, namespace=namespace, follow=True, _preload_content=False)
+            for line in logs.stream():
+                res +=line.decode('utf-8')
 
-    # delete the pod
-    try:
-        api_instance.delete_namespaced_pod(name=pod_name, namespace=namespace, body=client.V1DeleteOptions())
-        print(f"Pod '{pod_name}' deleted.")
+            if close:
+                api_instance.delete_namespaced_pod(name=pod_name, namespace=namespace, body=client.V1DeleteOptions())
+                LOGGER.debug(f"Pod '{pod_name}' deleted.")
+    
     except client.rest.ApiException as ex:
-        print(f"Exception when deleting Pod: {e}")
+        LOGGER.error(f"Exception when retrieving Pod logs: {ex}")
+    return res
+
+
+def delete_pod(pod):
+    """
+    delete_pod
+    """
+    res = False
+    if pod and pod.metadata:
+        pod_name = pod.metadata.name
+        namespace = pod.metadata.namespace
+        api_instance = client.CoreV1Api()
+        try:
+            api_instance.delete_namespaced_pod(name=pod_name, namespace=namespace, body=client.V1DeleteOptions())
+            LOGGER.debug(f"Pod '{pod_name}' deleted.")
+            res = True
+        except client.rest.ApiException as ex:
+            LOGGER.error(f"Exception when deleting Pod: {ex}")
+
+    return res
+
+
+def execute(command):
+    """
+    execute
+    """
+    pod = create_pod(command)
+    return read_log(pod, True)
+    
+
+
 
 def main():
     """
     main function
     """
     config.load_kube_config()
-    pod_manifest = 'conf/gdal.yml'
-    create_pod(pod_manifest, namespace="default")
+    fileyml = 'conf/gdal.yml'
+    output = execute("untrim --version")
+    print(output)
 
 if __name__ == "__main__":
     main()

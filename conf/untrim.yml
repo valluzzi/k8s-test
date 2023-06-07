@@ -1,15 +1,17 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: gdal
+  name: untrim
   labels:
-    run: gdal
+    run: untrim
 spec:
+  imagePullSecrets:
+    - name: dockerhub-pull
   containers:
-  - image: valluzzi/gdal:latest
-    name: gdal
+  - image: docker.io/valluzzi/untrim:latest
+    name: untrim
     command: 
-      - gdalinfo
+      - untrim
     args:
       - --version
   dnsPolicy: ClusterFirst
