@@ -1,6 +1,7 @@
 import os
 import time
 import yaml
+import re
 from kubernetes import client, config
 import shlex, logging
 from datetime import datetime
@@ -86,6 +87,19 @@ def create_pod(command):
         return None
     
 
+def parse_progress(line):
+    """
+    parse_progress - parse a log line in search for a progress percentage
+    """
+    if line:
+        # match percentage in the line 
+        # regexp with named group 'percentage'
+        m=re.match(r".*?(?P<percent>\d+(\.\d*)?)\s*%.*?", line)
+        percent = m.group("percent") if m else -1
+        return float(percent)
+    return -1
+
+
 def read_log(pod, close=False):
     """
     read_log
@@ -104,7 +118,11 @@ def read_log(pod, close=False):
             # get the pod logs
             logs = api_instance.read_namespaced_pod_log(name=pod_name, namespace=namespace, follow=True, _preload_content=False)
             for line in logs.stream():
-                res +=line.decode('utf-8')
+                line = line.decode('utf-8')
+                p = parse_progress(line)
+                if p>=0:
+                    print(f"{p}%")
+                res += line
 
             if close:
                 api_instance.delete_namespaced_pod(name=pod_name, namespace=namespace, body=client.V1DeleteOptions())
@@ -149,8 +167,8 @@ def main():
     main function
     """
     config.load_kube_config()
-    fileyml = 'conf/gdal.yml'
-    output = execute("untrim --version")
+    #fileyml = 'conf/timec.yml'
+    output = execute("python main.py 100")
     print(output)
 
 if __name__ == "__main__":

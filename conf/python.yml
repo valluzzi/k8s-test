@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: timec
+  
+  labels:
+    run: timec
+spec:
+  containers:
+  - image: valluzzi/timec:latest
+    name: timec
+    command:
+      - timec
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
